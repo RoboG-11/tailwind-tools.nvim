@@ -3,7 +3,7 @@
 
 # tailwind-tools.nvim
 
-Unofficial [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) integration and tooling for [Neovim](https://github.com/neovim/neovim) using the built-in LSP client and Treesitter, inspired by the official Visual Studio Code [extension](https://github.com/tailwindlabs/tailwindcss-intellisense).
+An unofficial [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) integration and tooling for [Neovim](https://github.com/neovim/neovim) written in Lua and JavaScript, leveraging the built-in LSP client, Treesitter, and the NodeJS plugin host. It is inspired by the official Visual Studio Code [extension](https://github.com/tailwindlabs/tailwindcss-intellisense).
 
 ![preview](https://github.com/luckasRanarison/tailwind-tools.nvim/assets/101930730/cb1c0508-8375-474f-9078-2842fb62e0b7)
 
@@ -27,9 +27,10 @@ It currently provides the following features:
 
 - Class color hints
 - Class concealing
+- Class motions
 - Class sorting (without [prettier-plugin](https://github.com/tailwindlabs/prettier-plugin-tailwindcss))
 - Completion utilities (using [nvim-cmp](https://github.com/hrsh7th/nvim-cmp))
-- Class motions
+- Class previewer (using [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim))
 
 > [!NOTE]
 > Language services like autocompletion, diagnostics and hover are already provided by [tailwindcss-language-server](https://github.com/tailwindlabs/tailwindcss-intellisense/tree/master/packages/tailwindcss-language-server).
@@ -39,6 +40,7 @@ It currently provides the following features:
 - Neovim v0.9 or higher (v0.10 is recommended)
 - [tailwindcss-language-server](https://github.com/tailwindlabs/tailwindcss-intellisense/tree/master/packages/tailwindcss-language-server) >= `v0.0.14` (can be installed using [Mason](https://github.com/williamboman/mason.nvim))
 - `html`, `css`, `tsx` and other language Treesitter grammars (using [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter))
+- Neovim [node-client](https://www.npmjs.com/package/neovim) (using npm)
 
 > [!TIP]
 > If you are not familiar with neovim LSP ecosystem check out [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) to learn how to setup the LSP.
@@ -51,12 +53,17 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 -- tailwind-tools.lua
 return {
   "luckasRanarison/tailwind-tools.nvim",
-  dependencies = { "nvim-treesitter/nvim-treesitter" },
+  name = "tailwind-tools",
+  build = ":UpdateRemotePlugins",
+  dependencies = {
+    "nvim-treesitter/nvim-treesitter",
+    "nvim-telescope/telescope.nvim", -- optional
+  },
   opts = {} -- your configuration
 }
 ```
 
-If you are using other package managers you need to call `setup`:
+If you are using other package managers, you need register the remote plugin by running the `:UpdateRemotePlugins` command, then call `setup` to enable the lua plugin:
 
 ```lua
 require("tailwind-tools").setup({
@@ -88,6 +95,12 @@ Here is the default configuration:
       fg = "#38BDF8",
     },
   },
+  telescope = {
+    utilities = {
+      -- the function used when selecting an utility class in telescope
+      callback = function(name, class) end,
+    },
+  },
   -- see the extension section to learn more
   extension = {
     queries = {}, -- a list of filetypes having custom `class` queries
@@ -117,6 +130,8 @@ Available commands:
 
 ## Utilities
 
+### nvim-cmp
+
 Utility function for highlighting colors in [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) using [lspkind.nvim](https://github.com/onsails/lspkind.nvim):
 
 ```lua
@@ -144,13 +159,23 @@ return {
 > [!TIP]
 > You can extend it by calling the function and get the returned `vim_item`, see the nvim-cmp [wiki](https://github.com/hrsh7th/nvim-cmp/wiki/Menu-Appearance) to learn more.
 
+### telescope.nvim
+
+The plugins registers by default a telescope extension that you can call using `:Telescope tailwind <subcommand>`
+
+Available subcommands:
+
+- `classes`: Lists all the classes in the current file and allows to jump to the selected location.
+
+- `utilities`: Lists all utility classes available in the current projects with a custom callback.
+
 ## Extension
 
 The plugin already supports many languages, but requests for additional language support and PRs are welcome. You can also extend the language support in your configuration by using Treesitter queries or Lua patterns (or both).
 
 ### Treesitter queries
 
-Treesitter queries are recommended but can be harder to write, if you are not familiar with Treesitter queries, check out the documentation from [Neovim](https://neovim.io/doc/user/treesitter.html#treesitter-query) or [Treesitter](https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax).
+Treesitter queries are recommended because they can precisely capture the class values at the AST level, but they can be harder to write. If you are not familiar with Treesitter queries, check out the documentation from [Neovim](https://neovim.io/doc/user/treesitter.html#treesitter-query) or [Treesitter](https://tree-sitter.github.io/tree-sitter/using-parsers#query-syntax).
 
 You can define custom queries for a filetype by adding the filetype to the `queries` list, like this:
 
@@ -186,12 +211,26 @@ The `class.scm` file should contain a query used to extract the class values for
     (attribute_value) @tailwind))
 ```
 
-> [!NOTE]
-> Some class ranges cannot be precisely captured using queries alone and are handled in code. You can also check out the existing [queries](./queries) to see more examples.
+Note that quantified captures (using `+` or `?`) cannot be captured using `@tailwind`. Instead, you must capture the parent node using `@tailwind.inner`.
+
+```scheme
+(arguments
+  (_)+) @tailwind.inner
+```
+
+You can also define node offsets by using the `#set!` directive and assign the `start` or `end` variables to some offset values (defaults to 0).
+
+```scheme
+((postcss_statement
+   (at_keyword) @_keyword
+   (#eq? @_keyword "@apply")
+   (plain_value)+) @tailwind.inner
+ (#set! @tailwind.inner "start" 1))
+```
 
 ### Lua patterns
 
-[Lua patterns](https://www.lua.org/pil/20.2.html) are easier to write, but note that the underlying implementation is not completely efficient, although this inefficiency is likely negligible. Currently, there are no reliable APIs for performing pattern searches and retrieving information about capture positions.
+[Lua patterns](https://www.lua.org/pil/20.2.html) are easier to write, but they have some limitations. Unlike Treesitter queries, Lua patterns cannot capture nested structures, they are limited to basic pattern matching.
 
 You can define custom patterns by attaching a list of patterns to filetypes. Each pattern should have exactly **one** capture group representing the class value, as shown below:
 
