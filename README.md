@@ -8,7 +8,6 @@ An unofficial [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) integr
 ![preview](https://github.com/luckasRanarison/tailwind-tools.nvim/assets/101930730/cb1c0508-8375-474f-9078-2842fb62e0b7)
 
 ## Contents
-
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -38,12 +37,9 @@ It currently provides the following features:
 ## Prerequisites
 
 - Neovim v0.9 or higher (v0.10 is recommended)
-- [tailwindcss-language-server](https://github.com/tailwindlabs/tailwindcss-intellisense/tree/master/packages/tailwindcss-language-server) >= `v0.0.14` (can be installed using [Mason](https://github.com/williamboman/mason.nvim))
+- [tailwindcss-language-server](https://github.com/tailwindlabs/tailwindcss-intellisense/tree/master/packages/tailwindcss-language-server) >= `v0.0.14` (can be installed using [Mason](https://github.com/williamboman/mason.nvim) or npm)
 - `html`, `css`, `tsx` and other language Treesitter grammars (using [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter))
 - Neovim [node-client](https://www.npmjs.com/package/neovim) (using npm)
-
-> [!TIP]
-> If you are not familiar with neovim LSP ecosystem check out [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) to learn how to setup the LSP.
 
 ## Installation
 
@@ -58,6 +54,7 @@ return {
   dependencies = {
     "nvim-treesitter/nvim-treesitter",
     "nvim-telescope/telescope.nvim", -- optional
+    "neovim/nvim-lspconfig", -- optional
   },
   opts = {} -- your configuration
 }
@@ -76,11 +73,18 @@ require("tailwind-tools").setup({
 > [!IMPORTANT]
 > Neovim v0.10 is required for vscode-like inline color hints.
 
+By default, the plugin automatically configures tailwindcss-language-server using [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig), if it is installed. Make sure you do not set up the server elsewhere.
+
 Here is the default configuration:
 
 ```lua
 ---@type TailwindTools.Option
 {
+  server = {
+    override = true, -- setup the server from the plugin if true
+    settings = {}, -- shortcut for `settings.tailwindCSS`
+    on_attach = function(client, bufnr) end, -- callback triggered when the server attaches to a buffer
+  },
   document_color = {
     enabled = true, -- can be toggled by commands
     kind = "inline", -- "inline" | "foreground" | "background"
@@ -95,10 +99,12 @@ Here is the default configuration:
       fg = "#38BDF8",
     },
   },
+  cmp = {
+    highlight = "foreground", -- color preview style, "foreground" | "background"
+  },
   telescope = {
     utilities = {
-      -- the function used when selecting an utility class in telescope
-      callback = function(name, class) end,
+      callback = function(name, class) end, -- callback used when selecting an utility class in telescope
     },
   },
   -- see the extension section to learn more
@@ -123,10 +129,13 @@ Available commands:
 - `TailwindColorEnable`: enables color hints for all buffers.
 - `TailwindColorDisable`: disables color hints.
 - `TailwindColorToggle`: toggles color hints.
-- `TailwindSort`: sorts all classes in the current buffer.
-- `TailwindSortSelection`: sorts selected classes in visual mode.
+- `TailwindSort(Sync)`: sorts all classes in the current buffer.
+- `TailwindSortSelection(Sync)`: sorts selected classes in visual mode.
 - `TailwindNextClass`: moves the cursor to the nearest next class node.
 - `TailwindPrevClass`: moves the cursor to the nearest previous class node.
+
+> [!NOTE]
+> In normal mode, `TailwindNextClass` and `TailwindPrevClass` can be used with a count to jump through multiple classes at once.
 
 ## Utilities
 
@@ -167,7 +176,7 @@ Available subcommands:
 
 - `classes`: Lists all the classes in the current file and allows to jump to the selected location.
 
-- `utilities`: Lists all utility classes available in the current projects with a custom callback.
+- `utilities`: Lists all utility classes available in the current project with a custom callback.
 
 ## Extension
 
